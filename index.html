@@ -135,7 +135,6 @@
       transform: translateX(-50%) scale(1.04);
     }
 
-    /* Overlay manifesto */
     #manifesto-overlay {
       position: absolute;
       inset: 0;
@@ -244,6 +243,16 @@ Just music, video, and privacy.`;
     let lastShakeAt = 0;
     let typingTimeout = null;
     let manifestoOpen = false;
+    let watchStartTime = null;
+
+    const recentVideoIds = [];
+    const recentCategories = [];
+
+    const sessionProfile = {
+      category: {},
+      mood: {},
+      energy: {}
+    };
 
     const player = document.getElementById("player");
     const playerFrame = document.getElementById("player-frame");
@@ -395,31 +404,30 @@ Just music, video, and privacy.`;
       return row.youtube_url || row.url || row.video_url || row.link || "";
     }
 
+    function normalizeEnergy(value) {
+      if (!value) return "";
+      return String(value).trim().toLowerCase();
+    }
+
     function normalizeVideos(rows) {
-  const vids = rows
-    .map((row) => {
-      const youtubeUrl = getYoutubeUrlFromRow(row);
-      const videoId = extractYouTubeId(youtubeUrl);
+      return rows
+        .map((row, index) => {
+          const youtubeUrl = getYoutubeUrlFromRow(row);
+          const videoId = extractYouTubeId(youtubeUrl);
 
-      if (!youtubeUrl || !videoId) return null;
+          if (!youtubeUrl || !videoId) return null;
 
-      return {
-        videoId,
-        youtubeUrl
-      };
-    })
-    .filter(Boolean);
-
-  return shuffleArray(vids);
-}
-    
-    function shuffleArray(array) {
-  for (let i = array.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [array[i], array[j]] = [array[j], array[i]];
-  }
-  return array;
-}
+          return {
+            id: row.id || videoId || `video-${index}`,
+            videoId,
+            youtubeUrl,
+            category: (row.category || "").trim().toLowerCase(),
+            mood: (row.mood || "").trim().toLowerCase(),
+            energy: normalizeEnergy(row.energy)
+          };
+        })
+        .filter(Boolean);
+    }
 
     async function fetchSheetVideos() {
       const response = await fetch(SHEET_CSV_URL);
@@ -433,6 +441,82 @@ Just music, video, and privacy.`;
       return normalizeVideos(rows);
     }
 
+    function bump(bucket, key, delta) {
+      if (!key) return;
+      bucket[key] = (bucket[key] || 0) + delta;
+    }
+
+    function registerFeedback(video, watchSeconds) {
+      if (!video) return;
+
+      if (watchSeconds < 5) {
+        bump(sessionProfile.category, video.category, -3);
+        bump(sessionProfile.mood, video.mood, -3);
+        bump(sessionProfile.energy, video.energy, -2);
+      } else if (watchSeconds < 15) {
+        bump(sessionProfile.category, video.category, -2);
+        bump(sessionProfile.mood, video.mood, -2);
+        bump(sessionProfile.energy, video.energy, -1);
+      } else if (watchSeconds < 45) {
+        bump(sessionProfile.category, video.category, 1);
+        bump(sessionProfile.mood, video.mood, 1);
+        bump(sessionProfile.energy, video.energy, 1);
+      } else {
+        bump(sessionProfile.category, video.category, 2);
+        bump(sessionProfile.mood, video.mood, 2);
+        bump(sessionProfile.energy, video.energy, 1);
+      }
+    }
+
+    function getWatchSeconds() {
+      if (!watchStartTime) return 0;
+      return (Date.now() - watchStartTime) / 1000;
+    }
+
+    function scoreVideo(video, candidateIndex) {
+      let score = 0;
+
+      score += (sessionProfile.category[video.category] || 0) * 3;
+      score += (sessionProfile.mood[video.mood] || 0) * 3;
+      score += (sessionProfile.energy[video.energy] || 0) * 2;
+
+      if (recentVideoIds.includes(video.id)) score -= 100;
+      if (recentCategories.slice(-2).includes(video.category)) score -= 4;
+      if (candidateIndex === currentIndex) score -= 1000;
+
+      score += Math.random() * 2;
+
+      return score;
+    }
+
+    function pickNextVideoIndex() {
+      if (videos.length <= 1) return 0;
+
+      const scored = videos.map((video, index) => ({
+        index,
+        score: scoreVideo(video, index)
+      }));
+
+      scored.sort((a, b) => b.score - a.score);
+
+      const topPool = scored.slice(0, Math.min(3, scored.length));
+      const picked = topPool[Math.floor(Math.random() * topPool.length)];
+
+      return picked.index;
+    }
+
+    function rememberCurrentVideo(video) {
+      if (!video) return;
+
+      recentVideoIds.push(video.id);
+      if (recentVideoIds.length > 12) recentVideoIds.shift();
+
+      if (video.category) {
+        recentCategories.push(video.category);
+        if (recentCategories.length > 6) recentCategories.shift();
+      }
+    }
+
     function loadVideo(index) {
       if (!videos.length) return;
 
@@ -440,10 +524,21 @@ Just music, video, and privacy.`;
       const current = videos[currentIndex];
 
       player.src = buildEmbedUrl(current.videoId, userInteracted);
+      watchStartTime = Date.now();
+      rememberCurrentVideo(current);
+
+      console.log("Now playing:", current);
+      console.log("Session profile:", sessionProfile);
     }
 
     function nextVideo() {
-      loadVideo(currentIndex + 1);
+      const current = videos[currentIndex];
+      const watchSeconds = getWatchSeconds();
+
+      registerFeedback(current, watchSeconds);
+
+      const nextIndex = pickNextVideoIndex();
+      loadVideo(nextIndex);
     }
 
     function enableSound() {
@@ -488,7 +583,7 @@ Just music, video, and privacy.`;
       }
     }
 
-    function typeWriter(text, element, speed = 32) {
+    function typeWriter(text, element, speed = 28) {
       if (typingTimeout) {
         clearTimeout(typingTimeout);
       }
@@ -545,7 +640,10 @@ Just music, video, and privacy.`;
           return;
         }
 
-        loadVideo(0);
+        // démarrage quasi aléatoire
+        currentIndex = Math.floor(Math.random() * videos.length);
+        loadVideo(currentIndex);
+
         hideLoader();
       } catch (error) {
         console.error(error);
