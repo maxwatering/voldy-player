@@ -87,6 +87,7 @@
       background: #000;
     }
 
+    /* --- MODIFICATION ICI POUR LE FULLSCREEN MOBILE --- */
     #player-frame {
       position: absolute;
       left: 50%;
@@ -94,9 +95,25 @@
       transform: translate(-50%, -50%);
       width: 100vw;
       height: 100vh;
-      overflow: hidden;
       background: #000;
     }
+
+    /* Si l'écran est plus étroit que 16:9 (Portrait / Mobile) */
+    @media (max-aspect-ratio: 16/9) {
+      #player-frame {
+        width: 177.78vh; /* (16/9) * 100vh : force le ratio 16:9 sur la hauteur */
+        height: 100vh;
+      }
+    }
+
+    /* Si l'écran est plus large que 16:9 (Ecrans ultra-wide) */
+    @media (min-aspect-ratio: 16/9) {
+      #player-frame {
+        width: 100vw;
+        height: 56.25vw; /* (9/16) * 100vw */
+      }
+    }
+    /* -------------------------------------------------- */
 
     #player {
       width: 100%;
