@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Voldy Player</title>
+
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    html, body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      background: #000;
+      color: #fff;
+      font-family: Arial, Helvetica, sans-serif;
+      overflow: hidden;
+    }
+
+    #app {
+      width: 100%;
+      height: 100%;
+      position: relative;
+      background: #000;
+    }
+
+    #player-container {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      background: #000;
+    }
+
+    #player {
+      width: 100%;
+      height: 100%;
+      border: 0;
+      display: block;
+      background: #000;
+    }
+
+    #overlay {
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      padding: 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      background: linear-gradient(to top, rgba(0,0,0,0.55), rgba(0,0,0,0));
+      z-index: 5;
+    }
+
+    #title {
+      font-size: 14px;
+      opacity: 0.9;
+    }
+
+    #counter {
+      margin-top: 6px;
+      font-size: 12px;
+      opacity: 0.65;
+    }
+
+    #next-btn {
+      border: 1px solid rgba(255,255,255,0.2);
+      background: rgba(255,255,255,0.1);
+      color: #fff;
+      padding: 10px 16px;
+      border-radius: 999px;
+      cursor: pointer;
+      font-size: 14px;
+    }
+
+    #message {
+      position: absolute;
+      inset: 0;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      background: #000;
+      z-index: 10;
+      font-size: 18px;
+      text-align: center;
+      padding: 24px;
+    }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <div id="message"></div>
+
+    <div id="player-container">
+      <iframe
+        id="player"
+        allow="autoplay; encrypted-media; picture-in-picture"
+        allowfullscreen
+        referrerpolicy="strict-origin-when-cross-origin"
+      ></iframe>
+    </div>
+
+    <div id="overlay">
+      <div>
+        <div id="title"></div>
+        <div id="counter"></div>
+      </div>
+
+      <button id="next-btn">Next</button>
+    </div>
+  </div>
+
+  <script>
+    const LOCAL_VIDEOS = [
+      { youtube_url: "https://www.youtube.com/watch?v=jNQXAC9IVRw" },
+      { youtube_url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ" },
+      { youtube_url: "https://www.youtube.com/watch?v=aqz-KE-bpKQ" }
+    ];
+
+    let videos = [];
+    let currentIndex = 0;
+
+    const player = document.getElementById("player");
+    const title = document.getElementById("title");
+    const counter = document.getElementById("counter");
+    const nextBtn = document.getElementById("next-btn");
+    const message = document.getElementById("message");
+
+    function showMessage(text) {
+      message.textContent = text;
+      message.style.display = "flex";
+    }
+
+    function extractYouTubeId(url) {
+      try {
+        const parsed = new URL(url);
+
+        if (parsed.hostname.includes("youtu.be")) {
+          return parsed.pathname.split("/").filter(Boolean)[0] || null;
+        }
+
+        if (parsed.hostname.includes("youtube.com")) {
+          const v = parsed.searchParams.get("v");
+          if (v) return v;
+
+          const parts = parsed.pathname.split("/").filter(Boolean);
+          const shortsIndex = parts.indexOf("shorts");
+          if (shortsIndex !== -1 && parts[shortsIndex + 1]) {
+            return parts[shortsIndex + 1];
+          }
+        }
+
+        return null;
+      } catch {
+        return null;
+      }
+    }
+
+    function buildEmbedUrl(videoId) {
+      const params = new URLSearchParams({
+        autoplay: "1",
+        mute: "1",
+        controls: "1",
+        rel: "0",
+        modestbranding: "1",
+        playsinline: "1"
+      });
+
+      return `https://www.youtube.com/embed/${videoId}?${params.toString()}`;
+    }
+
+    function normalizeVideos(items) {
+      return items
+        .map((item, index) => {
+          const videoId = extractYouTubeId(item.youtube_url);
+          if (!videoId) return null;
+
+          return {
+            videoId,
+            title: `Vidéo ${index + 1}`,
+            embedUrl: buildEmbedUrl(videoId)
+          };
+        })
+        .filter(Boolean);
+    }
+
+    function updateUI() {
+      const current = videos[currentIndex];
+      title.textContent = current.title;
+      counter.textContent = `${currentIndex + 1} / ${videos.length}`;
+    }
+
+    function loadVideo(index) {
+      if (!videos.length) return;
+
+      currentIndex = ((index % videos.length) + videos.length) % videos.length;
+      const current = videos[currentIndex];
+
+      player.src = current.embedUrl;
+      updateUI();
+    }
+
+    function nextVideo() {
+      loadVideo(currentIndex + 1);
+    }
+
+    function init() {
+      videos = normalizeVideos(LOCAL_VIDEOS);
+
+      if (!videos.length) {
+        showMessage("Aucune vidéo disponible.");
+        return;
+      }
+
+      loadVideo(0);
+    }
+
+    nextBtn.addEventListener("click", nextVideo);
+
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "ArrowRight" || e.key === " " || e.key.toLowerCase() === "n") {
+        e.preventDefault();
+        nextVideo();
+      }
+    });
+
+    init();
+  </script>
+</body>
+</html>
