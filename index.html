@@ -396,20 +396,30 @@ Just music, video, and privacy.`;
     }
 
     function normalizeVideos(rows) {
-      return rows
-        .map((row) => {
-          const youtubeUrl = getYoutubeUrlFromRow(row);
-          const videoId = extractYouTubeId(youtubeUrl);
+  const vids = rows
+    .map((row) => {
+      const youtubeUrl = getYoutubeUrlFromRow(row);
+      const videoId = extractYouTubeId(youtubeUrl);
 
-          if (!youtubeUrl || !videoId) return null;
+      if (!youtubeUrl || !videoId) return null;
 
-          return {
-            videoId,
-            youtubeUrl
-          };
-        })
-        .filter(Boolean);
-    }
+      return {
+        videoId,
+        youtubeUrl
+      };
+    })
+    .filter(Boolean);
+
+  return shuffleArray(vids);
+}
+    
+    function shuffleArray(array) {
+  for (let i = array.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [array[i], array[j]] = [array[j], array[i]];
+  }
+  return array;
+}
 
     async function fetchSheetVideos() {
       const response = await fetch(SHEET_CSV_URL);
