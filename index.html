@@ -45,36 +45,27 @@
 
     #overlay {
       position: absolute;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      padding: 24px;
-      display: flex;
-      justify-content: space-between;
-      align-items: flex-end;
-      background: linear-gradient(to top, rgba(0,0,0,0.55), rgba(0,0,0,0));
+      inset: 0;
+      pointer-events: none;
       z-index: 5;
     }
 
-    #title {
-      font-size: 14px;
-      opacity: 0.9;
-    }
-
-    #counter {
-      margin-top: 6px;
-      font-size: 12px;
-      opacity: 0.65;
+    #controls {
+      position: absolute;
+      right: 24px;
+      bottom: 24px;
+      pointer-events: auto;
     }
 
     #next-btn {
       border: 1px solid rgba(255,255,255,0.2);
-      background: rgba(255,255,255,0.1);
+      background: rgba(0,0,0,0.45);
       color: #fff;
-      padding: 10px 16px;
+      padding: 12px 18px;
       border-radius: 999px;
       cursor: pointer;
       font-size: 14px;
+      backdrop-filter: blur(8px);
     }
 
     #message {
@@ -102,8 +93,9 @@
     }
 
     @media (max-width: 768px) {
-      #overlay {
-        padding: 16px;
+      #controls {
+        right: 16px;
+        bottom: 16px;
       }
     }
   </style>
@@ -123,12 +115,9 @@
     </div>
 
     <div id="overlay">
-      <div>
-        <div id="title"></div>
-        <div id="counter"></div>
+      <div id="controls">
+        <button id="next-btn">Next</button>
       </div>
-
-      <button id="next-btn">Next</button>
     </div>
   </div>
 
@@ -137,10 +126,9 @@
 
     let videos = [];
     let currentIndex = 0;
+    let userInteracted = false;
 
     const player = document.getElementById("player");
-    const title = document.getElementById("title");
-    const counter = document.getElementById("counter");
     const nextBtn = document.getElementById("next-btn");
     const message = document.getElementById("message");
     const loader = document.getElementById("loader");
@@ -179,14 +167,17 @@
       }
     }
 
-    function buildEmbedUrl(videoId) {
+    function buildEmbedUrl(videoId, withSound = false) {
       const params = new URLSearchParams({
         autoplay: "1",
-        mute: "1",
-        controls: "1",
+        mute: withSound ? "0" : "1",
+        controls: "0",
         rel: "0",
         modestbranding: "1",
-        playsinline: "1"
+        playsinline: "1",
+        iv_load_policy: "3",
+        fs: "0",
+        disablekb: "1"
       });
 
       return `https://www.youtube.com/embed/${videoId}?${params.toString()}`;
@@ -245,13 +236,9 @@
       return row.youtube_url || row.url || row.video_url || row.link || "";
     }
 
-    function getTitleFromRow(row, index) {
-      return row.title || row.name || `Vidéo ${index + 1}`;
-    }
-
     function normalizeVideos(rows) {
       return rows
-        .map((row, index) => {
+        .map((row) => {
           const youtubeUrl = getYoutubeUrlFromRow(row);
           const videoId = extractYouTubeId(youtubeUrl);
 
@@ -259,8 +246,7 @@
 
           return {
             videoId,
-            title: getTitleFromRow(row, index),
-            embedUrl: buildEmbedUrl(videoId)
+            youtubeUrl
           };
         })
         .filter(Boolean);
@@ -278,20 +264,13 @@
       return normalizeVideos(rows);
     }
 
-    function updateUI() {
-      const current = videos[currentIndex];
-      title.textContent = current.title;
-      counter.textContent = `${currentIndex + 1} / ${videos.length}`;
-    }
-
     function loadVideo(index) {
       if (!videos.length) return;
 
       currentIndex = ((index % videos.length) + videos.length) % videos.length;
       const current = videos[currentIndex];
 
-      player.src = current.embedUrl;
-      updateUI();
+      player.src = buildEmbedUrl(current.videoId, userInteracted);
     }
 
     function nextVideo() {
@@ -317,11 +296,25 @@
       }
     }
 
-    nextBtn.addEventListener("click", nextVideo);
+    function enableSoundAndReloadCurrentVideo() {
+      if (userInteracted) return;
+      userInteracted = true;
+      loadVideo(currentIndex);
+    }
+
+    nextBtn.addEventListener("click", () => {
+      enableSoundAndReloadCurrentVideo();
+      nextVideo();
+    });
+
+    document.addEventListener("click", () => {
+      enableSoundAndReloadCurrentVideo();
+    }, { once: true });
 
     document.addEventListener("keydown", (e) => {
       if (e.key === "ArrowRight" || e.key === " " || e.key.toLowerCase() === "n") {
         e.preventDefault();
+        enableSoundAndReloadCurrentVideo();
         nextVideo();
       }
     });
