@@ -102,6 +102,8 @@
       pointer-events: none;
       transition: opacity 0.3s ease;
       white-space: nowrap;
+      text-align: center;
+      padding: 0 16px;
     }
 
     #hint.hidden {
@@ -222,7 +224,7 @@
       <div id="player-frame">
         <iframe
           id="player"
-          allow="autoplay; encrypted-media; picture-in-picture"
+          allow="autoplay; encrypted-media; picture-in-picture; accelerometer; gyroscope"
           allowfullscreen
           referrerpolicy="strict-origin-when-cross-origin"
         ></iframe>
@@ -230,7 +232,7 @@
     </div>
 
     <div id="tap-layer" aria-label="Suivant"></div>
-    <div id="hint">Tap / clic n’importe où = suivant · F = fullscreen</div>
+    <div id="hint">Tap / clic n’importe où = suivant · Secoue = suivant · F = fullscreen</div>
 
     <div id="fullscreen-btn" aria-label="Fullscreen" title="Fullscreen">
       <svg id="fullscreen-icon-enter" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
@@ -284,6 +286,8 @@ Just music, video, and privacy.`;
     let userInteracted = false;
     let typingTimeout = null;
     let manifestoOpen = false;
+    let motionEnabled = false;
+    let lastShakeAt = 0;
 
     const recentVideoIds = [];
     const recentCategories = [];
@@ -570,6 +574,9 @@ Just music, video, and privacy.`;
       player.src = buildEmbedUrl(current.videoId, userInteracted);
       watchStartTime = Date.now();
       rememberCurrentVideo(current);
+
+      console.log("Now playing:", current);
+      console.log("Session profile:", sessionProfile);
     }
 
     function nextVideo() {
@@ -585,6 +592,42 @@ Just music, video, and privacy.`;
     function enableSound() {
       if (userInteracted) return;
       userInteracted = true;
+    }
+
+    function onDeviceMotion(event) {
+      if (manifestoOpen) return;
+
+      const acc = event.accelerationIncludingGravity || event.acceleration;
+      if (!acc) return;
+
+      const x = Math.abs(acc.x || 0);
+      const y = Math.abs(acc.y || 0);
+      const z = Math.abs(acc.z || 0);
+      const total = x + y + z;
+      const now = Date.now();
+
+      if (total > 38 && now - lastShakeAt > 1200) {
+        lastShakeAt = now;
+        hideHint();
+        nextVideo();
+      }
+    }
+
+    async function enableMotionIfPossible() {
+      if (motionEnabled) return;
+      if (!("DeviceMotionEvent" in window)) return;
+
+      try {
+        if (typeof DeviceMotionEvent.requestPermission === "function") {
+          const permission = await DeviceMotionEvent.requestPermission();
+          if (permission !== "granted") return;
+        }
+
+        window.addEventListener("devicemotion", onDeviceMotion, { passive: true });
+        motionEnabled = true;
+      } catch (err) {
+        console.warn("Motion non activé :", err);
+      }
     }
 
     function typeWriter(text, element, speed = 28) {
@@ -628,6 +671,7 @@ Just music, video, and privacy.`;
       hideHint();
       enableSound();
       nextVideo();
+      enableMotionIfPossible();
     }
 
     function isFullscreenActive() {
