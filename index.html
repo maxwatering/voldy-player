@@ -123,14 +123,60 @@
       bottom: 8px;
       transform: translateX(-50%);
       width: 54px;
-      opacity: 0.58;
-      z-index: 26;
-      pointer-events: none;
-      transition: opacity 0.3s ease;
+      opacity: 0.72;
+      z-index: 50;
+      pointer-events: auto;
+      cursor: pointer;
+      transition: opacity 0.25s ease, transform 0.25s ease;
     }
 
-    #logo.hidden {
-      opacity: 0;
+    #logo:hover {
+      opacity: 1;
+      transform: translateX(-50%) scale(1.04);
+    }
+
+    /* Overlay manifesto */
+    #manifesto-overlay {
+      position: absolute;
+      inset: 0;
+      z-index: 60;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      background: rgba(0, 0, 0, 0);
+      padding: 32px;
+      cursor: pointer;
+    }
+
+    #manifesto-overlay.visible {
+      display: flex;
+    }
+
+    #manifesto-text {
+      color: #fff;
+      font-size: clamp(24px, 4vw, 48px);
+      line-height: 1.45;
+      text-align: center;
+      white-space: pre-line;
+      max-width: 900px;
+      font-weight: 500;
+      letter-spacing: -0.02em;
+      text-shadow: 0 0 18px rgba(0,0,0,0.45);
+    }
+
+    #manifesto-caret {
+      display: inline-block;
+      width: 0.08em;
+      background: #fff;
+      margin-left: 0.08em;
+      animation: blink 0.9s steps(1) infinite;
+      vertical-align: baseline;
+    }
+
+    @keyframes blink {
+      50% {
+        opacity: 0;
+      }
     }
 
     @media (max-width: 768px) {
@@ -142,6 +188,10 @@
       #logo {
         width: 50px;
         bottom: 6px;
+      }
+
+      #manifesto-text {
+        font-size: clamp(20px, 6vw, 34px);
       }
     }
   </style>
@@ -164,7 +214,12 @@
 
     <div id="tap-layer" aria-label="Suivant"></div>
     <div id="hint">Tap / clic n’importe où = suivant · Secoue le téléphone = suivant</div>
+
     <img id="logo" src="/simp.png" alt="Simp" />
+
+    <div id="manifesto-overlay" aria-label="About Simp">
+      <div id="manifesto-text"></div>
+    </div>
   </div>
 
   <script>
@@ -173,11 +228,22 @@
     const VIDEO_ASPECT_RATIO = 16 / 9;
     const MOBILE_BREAKPOINT = 900;
 
+    const MANIFESTO_TEXT =
+`No account.
+No password.
+No ads.
+No cookies.
+No tracking.
+No data collection.
+Just music, video, and privacy.`;
+
     let videos = [];
     let currentIndex = 0;
     let userInteracted = false;
     let motionEnabled = false;
     let lastShakeAt = 0;
+    let typingTimeout = null;
+    let manifestoOpen = false;
 
     const player = document.getElementById("player");
     const playerFrame = document.getElementById("player-frame");
@@ -186,6 +252,8 @@
     const message = document.getElementById("message");
     const hint = document.getElementById("hint");
     const logo = document.getElementById("logo");
+    const manifestoOverlay = document.getElementById("manifesto-overlay");
+    const manifestoText = document.getElementById("manifesto-text");
 
     function showMessage(text) {
       message.textContent = text;
@@ -198,10 +266,6 @@
 
     function hideHint() {
       hint.classList.add("hidden");
-    }
-
-    function hideLogo() {
-      logo.classList.add("hidden");
     }
 
     function isMobileLike() {
@@ -378,6 +442,8 @@
     }
 
     function onDeviceMotion(event) {
+      if (manifestoOpen) return;
+
       const acc = event.accelerationIncludingGravity || event.acceleration;
       if (!acc) return;
 
@@ -391,7 +457,6 @@
       if (total > 38 && now - lastShakeAt > 1200) {
         lastShakeAt = now;
         hideHint();
-        hideLogo();
         nextVideo();
       }
     }
@@ -413,9 +478,47 @@
       }
     }
 
+    function typeWriter(text, element, speed = 32) {
+      if (typingTimeout) {
+        clearTimeout(typingTimeout);
+      }
+
+      element.innerHTML = "";
+      let index = 0;
+
+      function step() {
+        const visible = text.slice(0, index);
+        element.innerHTML = `${visible}<span id="manifesto-caret"></span>`;
+        index++;
+
+        if (index <= text.length) {
+          typingTimeout = setTimeout(step, speed);
+        } else {
+          element.innerHTML = text;
+        }
+      }
+
+      step();
+    }
+
+    function openManifesto() {
+      manifestoOpen = true;
+      manifestoOverlay.classList.add("visible");
+      typeWriter(MANIFESTO_TEXT, manifestoText, 28);
+    }
+
+    function closeManifesto() {
+      manifestoOpen = false;
+      manifestoOverlay.classList.remove("visible");
+      manifestoText.innerHTML = "";
+      if (typingTimeout) {
+        clearTimeout(typingTimeout);
+      }
+    }
+
     function handleTapNext() {
+      if (manifestoOpen) return;
       hideHint();
-      hideLogo();
       enableSound();
       nextVideo();
       enableMotionIfPossible();
@@ -443,7 +546,26 @@
 
     tapLayer.addEventListener("click", handleTapNext);
 
+    logo.addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (manifestoOpen) {
+        closeManifesto();
+      } else {
+        openManifesto();
+      }
+    });
+
+    manifestoOverlay.addEventListener("click", (e) => {
+      e.stopPropagation();
+      closeManifesto();
+    });
+
     document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && manifestoOpen) {
+        closeManifesto();
+        return;
+      }
+
       if (e.key === "ArrowRight" || e.key === " " || e.key.toLowerCase() === "n") {
         e.preventDefault();
         handleTapNext();
