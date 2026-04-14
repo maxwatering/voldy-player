@@ -89,10 +89,28 @@
       text-align: center;
       padding: 24px;
     }
+
+    #loader {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #000;
+      z-index: 10;
+      font-size: 18px;
+    }
+
+    @media (max-width: 768px) {
+      #overlay {
+        padding: 16px;
+      }
+    }
   </style>
 </head>
 <body>
   <div id="app">
+    <div id="loader">Chargement…</div>
     <div id="message"></div>
 
     <div id="player-container">
@@ -115,11 +133,7 @@
   </div>
 
   <script>
-    const LOCAL_VIDEOS = [
-      { youtube_url: "https://www.youtube.com/watch?v=jNQXAC9IVRw" },
-      { youtube_url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ" },
-      { youtube_url: "https://www.youtube.com/watch?v=aqz-KE-bpKQ" }
-    ];
+    const SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQWb6tylWpk9MZSp4sppFMgMPsVJBp3xyV5aJxLciYDcS2U5XiljbZlAg8muJzc3f6J4-bVfqYJf-a4/pub?gid=0&single=true&output=csv";
 
     let videos = [];
     let currentIndex = 0;
@@ -129,10 +143,15 @@
     const counter = document.getElementById("counter");
     const nextBtn = document.getElementById("next-btn");
     const message = document.getElementById("message");
+    const loader = document.getElementById("loader");
 
     function showMessage(text) {
       message.textContent = text;
       message.style.display = "flex";
+    }
+
+    function hideLoader() {
+      loader.style.display = "none";
     }
 
     function extractYouTubeId(url) {
@@ -173,19 +192,90 @@
       return `https://www.youtube.com/embed/${videoId}?${params.toString()}`;
     }
 
-    function normalizeVideos(items) {
-      return items
-        .map((item, index) => {
-          const videoId = extractYouTubeId(item.youtube_url);
-          if (!videoId) return null;
+    function parseCSVLine(line) {
+      const result = [];
+      let current = "";
+      let inQuotes = false;
+
+      for (let i = 0; i < line.length; i++) {
+        const char = line[i];
+        const nextChar = line[i + 1];
+
+        if (char === '"') {
+          if (inQuotes && nextChar === '"') {
+            current += '"';
+            i++;
+          } else {
+            inQuotes = !inQuotes;
+          }
+        } else if (char === "," && !inQuotes) {
+          result.push(current);
+          current = "";
+        } else {
+          current += char;
+        }
+      }
+
+      result.push(current);
+      return result;
+    }
+
+    function csvToObjects(csvText) {
+      const lines = csvText
+        .split(/\r?\n/)
+        .filter(line => line.trim().length > 0);
+
+      if (lines.length < 2) return [];
+
+      const headers = parseCSVLine(lines[0]).map(h => h.trim());
+
+      return lines.slice(1).map(line => {
+        const values = parseCSVLine(line);
+        const obj = {};
+
+        headers.forEach((header, index) => {
+          obj[header] = (values[index] || "").trim();
+        });
+
+        return obj;
+      });
+    }
+
+    function getYoutubeUrlFromRow(row) {
+      return row.youtube_url || row.url || row.video_url || row.link || "";
+    }
+
+    function getTitleFromRow(row, index) {
+      return row.title || row.name || `Vidéo ${index + 1}`;
+    }
+
+    function normalizeVideos(rows) {
+      return rows
+        .map((row, index) => {
+          const youtubeUrl = getYoutubeUrlFromRow(row);
+          const videoId = extractYouTubeId(youtubeUrl);
+
+          if (!youtubeUrl || !videoId) return null;
 
           return {
             videoId,
-            title: `Vidéo ${index + 1}`,
+            title: getTitleFromRow(row, index),
             embedUrl: buildEmbedUrl(videoId)
           };
         })
         .filter(Boolean);
+    }
+
+    async function fetchSheetVideos() {
+      const response = await fetch(SHEET_CSV_URL);
+
+      if (!response.ok) {
+        throw new Error(`Erreur Google Sheets: ${response.status}`);
+      }
+
+      const csvText = await response.text();
+      const rows = csvToObjects(csvText);
+      return normalizeVideos(rows);
     }
 
     function updateUI() {
@@ -208,15 +298,23 @@
       loadVideo(currentIndex + 1);
     }
 
-    function init() {
-      videos = normalizeVideos(LOCAL_VIDEOS);
+    async function init() {
+      try {
+        videos = await fetchSheetVideos();
 
-      if (!videos.length) {
-        showMessage("Aucune vidéo disponible.");
-        return;
+        if (!videos.length) {
+          hideLoader();
+          showMessage("Aucune vidéo trouvée dans Google Sheets.");
+          return;
+        }
+
+        loadVideo(0);
+        hideLoader();
+      } catch (error) {
+        console.error(error);
+        hideLoader();
+        showMessage("Impossible de charger Google Sheets : " + error.message);
       }
-
-      loadVideo(0);
     }
 
     nextBtn.addEventListener("click", nextVideo);
