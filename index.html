@@ -21,6 +21,10 @@
       cursor: pointer;
     }
 
+    body {
+      font-family: Arial, Helvetica, sans-serif;
+    }
+
     #app {
       position: fixed;
       inset: 0;
@@ -31,6 +35,10 @@
     #player-container {
       position: absolute;
       inset: 0;
+      width: 100%;
+      height: 100%;
+      background: #000;
+      overflow: hidden;
     }
 
     #player-frame {
@@ -40,12 +48,16 @@
       transform: translate(-50%, -50%);
       width: 100vw;
       height: 100vh;
+      background: #000;
+      overflow: hidden;
     }
 
     #player {
       width: 100%;
       height: 100%;
       border: 0;
+      display: block;
+      background: #000;
       pointer-events: none;
     }
 
@@ -53,6 +65,8 @@
       position: absolute;
       inset: 0;
       z-index: 20;
+      background: transparent;
+      cursor: pointer;
     }
 
     #loader {
@@ -64,6 +78,7 @@
       background: #000;
       color: #fff;
       z-index: 30;
+      font-size: 18px;
     }
 
     #message {
@@ -72,42 +87,62 @@
       display: none;
       align-items: center;
       justify-content: center;
-      color: #fff;
-      z-index: 40;
       text-align: center;
       padding: 24px;
+      background: #000;
+      color: #fff;
+      z-index: 40;
+      font-size: 18px;
+      line-height: 1.4;
     }
 
     #hint {
       position: absolute;
       left: 50%;
-      bottom: 20px;
+      bottom: 28px;
       transform: translateX(-50%);
-      color: rgba(255,255,255,0.7);
-      font-size: 12px;
       z-index: 25;
-      transition: opacity 0.3s;
+      color: rgba(255,255,255,0.72);
+      font-size: 12px;
+      letter-spacing: 0.04em;
+      pointer-events: none;
+      opacity: 1;
+      transition: opacity 0.35s ease;
+      text-align: center;
+      padding: 0 16px;
+      white-space: nowrap;
     }
 
     #hint.hidden {
       opacity: 0;
     }
 
-    /* LOGO */
     #logo {
       position: absolute;
       left: 50%;
       bottom: 8px;
       transform: translateX(-50%);
-      width: 50px;
-      opacity: 0.55;
-      z-index: 25;
+      width: 54px;
+      opacity: 0.58;
+      z-index: 26;
       pointer-events: none;
       transition: opacity 0.3s ease;
     }
 
     #logo.hidden {
       opacity: 0;
+    }
+
+    @media (max-width: 768px) {
+      #hint {
+        font-size: 11px;
+        bottom: 26px;
+      }
+
+      #logo {
+        width: 50px;
+        bottom: 6px;
+      }
     }
   </style>
 </head>
@@ -118,89 +153,305 @@
 
     <div id="player-container">
       <div id="player-frame">
-        <iframe id="player" allow="autoplay"></iframe>
+        <iframe
+          id="player"
+          allow="autoplay; encrypted-media; picture-in-picture"
+          allowfullscreen
+          referrerpolicy="strict-origin-when-cross-origin"
+        ></iframe>
       </div>
     </div>
 
-    <div id="tap-layer"></div>
-    <div id="hint">Tap n’importe où</div>
-
-    <!-- LOGO -->
+    <div id="tap-layer" aria-label="Suivant"></div>
+    <div id="hint">Tap / clic n’importe où = suivant · Secoue le téléphone = suivant</div>
     <img id="logo" src="/simp.png" alt="Simp" />
   </div>
 
   <script>
     const SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQWb6tylWpk9MZSp4sppFMgMPsVJBp3xyV5aJxLciYDcS2U5XiljbZlAg8muJzc3f6J4-bVfqYJf-a4/pub?gid=0&single=true&output=csv";
 
+    const VIDEO_ASPECT_RATIO = 16 / 9;
+    const MOBILE_BREAKPOINT = 900;
+
     let videos = [];
     let currentIndex = 0;
     let userInteracted = false;
+    let motionEnabled = false;
+    let lastShakeAt = 0;
 
     const player = document.getElementById("player");
+    const playerFrame = document.getElementById("player-frame");
     const tapLayer = document.getElementById("tap-layer");
     const loader = document.getElementById("loader");
     const message = document.getElementById("message");
     const hint = document.getElementById("hint");
     const logo = document.getElementById("logo");
 
+    function showMessage(text) {
+      message.textContent = text;
+      message.style.display = "flex";
+    }
+
+    function hideLoader() {
+      loader.style.display = "none";
+    }
+
+    function hideHint() {
+      hint.classList.add("hidden");
+    }
+
+    function hideLogo() {
+      logo.classList.add("hidden");
+    }
+
+    function isMobileLike() {
+      return window.innerWidth <= MOBILE_BREAKPOINT || /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+    }
+
+    function isPortrait() {
+      return window.innerHeight > window.innerWidth;
+    }
+
+    function updatePlayerLayout() {
+      const vw = window.innerWidth;
+      const vh = window.innerHeight;
+
+      if (isMobileLike() && isPortrait()) {
+        const viewportAspect = vw / vh;
+
+        if (viewportAspect < VIDEO_ASPECT_RATIO) {
+          const coverHeight = vh;
+          const coverWidth = vh * VIDEO_ASPECT_RATIO;
+          playerFrame.style.width = `${coverWidth}px`;
+          playerFrame.style.height = `${coverHeight}px`;
+        } else {
+          const coverWidth = vw;
+          const coverHeight = vw / VIDEO_ASPECT_RATIO;
+          playerFrame.style.width = `${coverWidth}px`;
+          playerFrame.style.height = `${coverHeight}px`;
+        }
+      } else {
+        playerFrame.style.width = "100vw";
+        playerFrame.style.height = "100vh";
+      }
+    }
+
     function extractYouTubeId(url) {
       try {
         const parsed = new URL(url);
-        return parsed.searchParams.get("v");
+
+        if (parsed.hostname.includes("youtu.be")) {
+          return parsed.pathname.split("/").filter(Boolean)[0] || null;
+        }
+
+        if (parsed.hostname.includes("youtube.com")) {
+          const v = parsed.searchParams.get("v");
+          if (v) return v;
+
+          const parts = parsed.pathname.split("/").filter(Boolean);
+          const shortsIndex = parts.indexOf("shorts");
+          if (shortsIndex !== -1 && parts[shortsIndex + 1]) {
+            return parts[shortsIndex + 1];
+          }
+        }
+
+        return null;
       } catch {
         return null;
       }
     }
 
-    function buildEmbedUrl(videoId, sound = false) {
-      return `https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1&mute=${sound ? 0 : 1}&controls=0&modestbranding=1`;
+    function buildEmbedUrl(videoId, withSound = false) {
+      const params = new URLSearchParams({
+        autoplay: "1",
+        mute: withSound ? "0" : "1",
+        controls: "0",
+        rel: "0",
+        modestbranding: "1",
+        playsinline: "1",
+        iv_load_policy: "3",
+        fs: "0",
+        disablekb: "1",
+        color: "white"
+      });
+
+      return `https://www.youtube-nocookie.com/embed/${videoId}?${params.toString()}`;
     }
 
-    async function fetchVideos() {
-      const res = await fetch(SHEET_CSV_URL);
-      const text = await res.text();
+    function parseCSVLine(line) {
+      const result = [];
+      let current = "";
+      let inQuotes = false;
 
-      const lines = text.split("\n").slice(1);
+      for (let i = 0; i < line.length; i++) {
+        const char = line[i];
+        const nextChar = line[i + 1];
 
-      return lines.map(line => {
-        const url = line.split(",")[0];
-        const id = extractYouTubeId(url);
-        if (!id) return null;
-        return { id };
-      }).filter(Boolean);
+        if (char === '"') {
+          if (inQuotes && nextChar === '"') {
+            current += '"';
+            i++;
+          } else {
+            inQuotes = !inQuotes;
+          }
+        } else if (char === "," && !inQuotes) {
+          result.push(current);
+          current = "";
+        } else {
+          current += char;
+        }
+      }
+
+      result.push(current);
+      return result;
+    }
+
+    function csvToObjects(csvText) {
+      const lines = csvText
+        .split(/\r?\n/)
+        .filter(line => line.trim().length > 0);
+
+      if (lines.length < 2) return [];
+
+      const headers = parseCSVLine(lines[0]).map(h => h.trim());
+
+      return lines.slice(1).map(line => {
+        const values = parseCSVLine(line);
+        const obj = {};
+
+        headers.forEach((header, index) => {
+          obj[header] = (values[index] || "").trim();
+        });
+
+        return obj;
+      });
+    }
+
+    function getYoutubeUrlFromRow(row) {
+      return row.youtube_url || row.url || row.video_url || row.link || "";
+    }
+
+    function normalizeVideos(rows) {
+      return rows
+        .map((row) => {
+          const youtubeUrl = getYoutubeUrlFromRow(row);
+          const videoId = extractYouTubeId(youtubeUrl);
+
+          if (!youtubeUrl || !videoId) return null;
+
+          return {
+            videoId,
+            youtubeUrl
+          };
+        })
+        .filter(Boolean);
+    }
+
+    async function fetchSheetVideos() {
+      const response = await fetch(SHEET_CSV_URL);
+
+      if (!response.ok) {
+        throw new Error(`Erreur Google Sheets: ${response.status}`);
+      }
+
+      const csvText = await response.text();
+      const rows = csvToObjects(csvText);
+      return normalizeVideos(rows);
     }
 
     function loadVideo(index) {
       if (!videos.length) return;
-      currentIndex = index % videos.length;
-      player.src = buildEmbedUrl(videos[currentIndex].id, userInteracted);
+
+      currentIndex = ((index % videos.length) + videos.length) % videos.length;
+      const current = videos[currentIndex];
+
+      player.src = buildEmbedUrl(current.videoId, userInteracted);
     }
 
     function nextVideo() {
       loadVideo(currentIndex + 1);
     }
 
-    function handleTap() {
-      hint.classList.add("hidden");
-      logo.classList.add("hidden");
+    function enableSound() {
+      if (userInteracted) return;
       userInteracted = true;
+    }
+
+    function onDeviceMotion(event) {
+      const acc = event.accelerationIncludingGravity || event.acceleration;
+      if (!acc) return;
+
+      const x = Math.abs(acc.x || 0);
+      const y = Math.abs(acc.y || 0);
+      const z = Math.abs(acc.z || 0);
+      const total = x + y + z;
+
+      const now = Date.now();
+
+      if (total > 38 && now - lastShakeAt > 1200) {
+        lastShakeAt = now;
+        hideHint();
+        hideLogo();
+        nextVideo();
+      }
+    }
+
+    async function enableMotionIfPossible() {
+      if (motionEnabled) return;
+      if (!("DeviceMotionEvent" in window)) return;
+
+      try {
+        if (typeof DeviceMotionEvent.requestPermission === "function") {
+          const permission = await DeviceMotionEvent.requestPermission();
+          if (permission !== "granted") return;
+        }
+
+        window.addEventListener("devicemotion", onDeviceMotion, { passive: true });
+        motionEnabled = true;
+      } catch (err) {
+        console.warn("Motion non activé :", err);
+      }
+    }
+
+    function handleTapNext() {
+      hideHint();
+      hideLogo();
+      enableSound();
       nextVideo();
+      enableMotionIfPossible();
     }
 
     async function init() {
       try {
-        videos = await fetchVideos();
-        if (!videos.length) throw new Error();
+        updatePlayerLayout();
+        videos = await fetchSheetVideos();
+
+        if (!videos.length) {
+          hideLoader();
+          showMessage("Aucune vidéo trouvée dans Google Sheets.");
+          return;
+        }
+
         loadVideo(0);
-        loader.style.display = "none";
-      } catch {
-        loader.style.display = "none";
-        message.style.display = "flex";
-        message.textContent = "Erreur chargement vidéos";
+        hideLoader();
+      } catch (error) {
+        console.error(error);
+        hideLoader();
+        showMessage("Impossible de charger Google Sheets : " + error.message);
       }
     }
 
-    tapLayer.addEventListener("click", handleTap);
+    tapLayer.addEventListener("click", handleTapNext);
+
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "ArrowRight" || e.key === " " || e.key.toLowerCase() === "n") {
+        e.preventDefault();
+        handleTapNext();
+      }
+    });
+
+    window.addEventListener("resize", updatePlayerLayout);
+    window.addEventListener("orientationchange", updatePlayerLayout);
 
     init();
   </script>
