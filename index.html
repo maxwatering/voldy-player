@@ -3,698 +3,352 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <title>Simp</title>
+  <title>Simp - AI Music Stream</title>
+  
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
 
   <style>
-    * {
-      box-sizing: border-box;
-      -webkit-tap-highlight-color: transparent;
-      user-select: none;
-    }
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; user-select: none; }
+    html, body { margin: 0; width: 100%; height: 100%; background: #000; overflow: hidden; cursor: pointer; font-family: 'Courier New', Courier, monospace; }
+    #app { position: fixed; inset: 0; background: #000; overflow: hidden; }
 
-    html, body {
-      margin: 0;
-      width: 100%;
-      height: 100%;
-      background: #000;
-      overflow: hidden;
-      cursor: pointer;
-      font-family: Arial, Helvetica, sans-serif;
-    }
-
-    #app {
-      position: fixed;
-      inset: 0;
-      background: #000;
-      overflow: hidden;
-    }
-
+    /* OVERLAY ACCÈS WONDERLAND */
     #start-overlay {
-      position: absolute;
-      inset: 0;
-      z-index: 200;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      gap: 24px;
-      background: #000;
+      position: absolute; inset: 0; z-index: 200;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 40px; background: #000; transition: opacity 1s ease;
+    }
+    #start-overlay.hidden { opacity: 0; visibility: hidden; pointer-events: none; }
+    #start-logo { width: 70px; opacity: 0.6; filter: grayscale(1); }
+    .input-wrapper { display: flex; flex-direction: column; align-items: center; gap: 20px; }
+    #access-hint { color: #555; font-size: 14px; letter-spacing: 0.1em; text-align: center; }
+    #access-input {
+      background: transparent; border: none; border-bottom: 1px solid #222;
+      color: #fff; text-align: center; font-size: 42px; letter-spacing: 0.2em;
+      width: 220px; outline: none; padding: 10px; transition: all 0.3s;
+    }
+    #access-input:focus { border-bottom-color: #444; }
+    .button-group {
+      display: flex; gap: 20px; opacity: 0; transform: translateY(15px);
+      transition: all 0.6s ease; pointer-events: none;
+    }
+    .button-group.visible { opacity: 1; transform: translateY(0); pointer-events: auto; }
+    .choice-btn {
+      padding: 12px 35px; border-radius: 2px; font-weight: bold;
+      font-size: 12px; cursor: pointer; text-transform: uppercase;
+      border: none; letter-spacing: 0.2em; transition: transform 0.2s;
+    }
+    .btn-red { background: #ff0033; color: #fff; box-shadow: 0 0 15px rgba(255, 0, 51, 0.2); }
+    .btn-blue { background: #0066ff; color: #fff; box-shadow: 0 0 15px rgba(0, 102, 255, 0.2); }
+
+    /* PLAYER CONTAINER - FULL VERTICAL MOBILE */
+    #player-container { position: absolute; inset: 0; background: #000; overflow: hidden; }
+    #player-frame { 
+      position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); 
+      width: 100vw; height: 56.25vw; transition: opacity 0.8s ease;
+    }
+    @media (orientation: portrait) {
+      #player-frame { height: 100dvh; width: 177.78dvh; }
+    }
+    @media (orientation: landscape) and (min-aspect-ratio: 16/9) {
+      #player-frame { width: 100vw; height: 56.25vw; }
     }
 
-    #start-overlay.hidden {
-      display: none;
-    }
-
-    #start-logo {
-      width: 90px;
-      opacity: 0.92;
-    }
-
-    #start-btn {
-      border: 1px solid rgba(255,255,255,0.2);
-      background: rgba(255,255,255,0.08);
-      color: #fff;
-      padding: 14px 22px;
-      border-radius: 999px;
-      font-size: 14px;
-      cursor: pointer;
-      backdrop-filter: blur(8px);
-      transition: transform 0.2s ease, background 0.2s ease, opacity 0.2s ease;
-    }
-
-    #start-btn:hover {
-      transform: scale(1.03);
-      background: rgba(255,255,255,0.14);
-    }
-
-    #start-btn:disabled {
-      opacity: 0.45;
-      cursor: default;
-    }
-
-    #start-status {
-      color: rgba(255,255,255,0.6);
-      font-size: 12px;
-      letter-spacing: 0.04em;
-    }
-
-    #player-container {
-      position: absolute;
-      inset: 0;
-      width: 100%;
-      height: 100%;
-      overflow: hidden;
-      background: #000;
-    }
-
-    #player-frame {
-      position: absolute;
-      left: 50%;
-      top: 50%;
-      transform: translate(-50%, -50%);
-      width: 100vw;
-      height: 100vh;
-      background: #000;
-    }
-
-    @media (max-aspect-ratio: 16/9) {
-      #player-frame {
-        width: 177.78vh;
-        height: 100vh;
-      }
-    }
-
-    @media (min-aspect-ratio: 16/9) {
-      #player-frame {
-        width: 100vw;
-        height: 56.25vw;
-      }
-    }
-
-    #player {
-      width: 100%;
-      height: 100%;
-      border: 0;
-      display: block;
-      background: #000;
-      pointer-events: none;
-    }
-
-    #tap-layer {
-      position: absolute;
-      inset: 0;
-      z-index: 20;
-    }
-
-    #loader {
-      position: absolute;
-      inset: 0;
-      display: none;
-      align-items: center;
-      justify-content: center;
-      color: #fff;
-      background: #000;
-      z-index: 30;
-      font-size: 18px;
-    }
-
-    #message {
-      position: absolute;
-      inset: 0;
-      display: none;
-      align-items: center;
-      justify-content: center;
-      text-align: center;
-      padding: 24px;
-      color: #fff;
-      background: rgba(0, 0, 0, 0.9);
-      z-index: 40;
-      font-size: 18px;
-      line-height: 1.4;
-    }
-
-    #hint {
-      position: absolute;
-      left: 50%;
-      bottom: 28px;
-      transform: translateX(-50%);
-      color: rgba(255,255,255,0.7);
-      font-size: 12px;
-      z-index: 25;
-      pointer-events: none;
-      white-space: nowrap;
-      text-align: center;
-      padding: 0 16px;
-    }
-
-    #hint.hidden {
-      opacity: 0;
-    }
-
-    #logo {
-      position: absolute;
-      left: 50%;
-      bottom: 8px;
-      transform: translateX(-50%);
-      width: 50px;
-      z-index: 50;
-      cursor: pointer;
-      opacity: 0.78;
-      transition: opacity 0.2s ease, transform 0.2s ease;
-    }
-
-    #logo:hover {
-      opacity: 1;
-      transform: translateX(-50%) scale(1.04);
-    }
+    #player { width: 100%; height: 100%; border: 0; pointer-events: none; }
+    #tap-layer { position: absolute; inset: 0; z-index: 20; cursor: pointer; }
+    #logo { position: absolute; left: 50%; bottom: 15px; transform: translateX(-50%); width: 40px; z-index: 50; opacity: 0.3; transition: opacity 0.3s; cursor: pointer; }
 
     #fullscreen-btn {
-      position: absolute;
-      right: 12px;
-      bottom: 12px;
-      width: 38px;
-      height: 38px;
-      border-radius: 999px;
-      background: rgba(0,0,0,0.15);
-      border: 1px solid rgba(255,255,255,0.1);
-      backdrop-filter: blur(4px);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      z-index: 60;
-      cursor: pointer;
-      color: rgba(255, 255, 255, 0.3);
-      transition: all 0.2s ease;
+      position: absolute; right: 20px; bottom: 20px; width: 40px; height: 40px;
+      border-radius: 50%; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1);
+      display: flex; align-items: center; justify-content: center; z-index: 60;
+      color: rgba(255,255,255,0.4); cursor: pointer;
     }
 
-    #fullscreen-btn:hover {
-      transform: scale(1.05);
-      background: rgba(0,0,0,0.3);
-      color: rgba(255, 255, 255, 0.6);
-    }
-
-    #fullscreen-btn svg {
-      width: 18px;
-      height: 18px;
-    }
-
+    /* MANIFESTO PIXEL ART */
     #manifesto-overlay {
-      position: absolute;
-      inset: 0;
-      display: none;
-      align-items: center;
-      justify-content: center;
-      z-index: 100;
-      background: rgba(0,0,0,0);
-      padding: 32px;
-      cursor: pointer;
+      position: absolute; inset: 0; display: none; align-items: center; justify-content: center;
+      z-index: 100; background: rgba(0,0,0,0.98); padding: 40px; cursor: pointer;
     }
-
-    #manifesto-overlay.visible {
-      display: flex;
+    #manifesto-overlay.visible { display: flex; }
+    #manifesto-text { 
+      color: #fff; font-family: 'Press Start 2P', cursive; font-size: clamp(10px, 2.2vw, 16px); 
+      text-align: center; white-space: pre-line; line-height: 2; max-width: 900px; 
     }
-
-    #manifesto-text {
-      color: #fff;
-      font-size: clamp(20px, 4.5vw, 36px);
-      text-align: center;
-      white-space: pre-line;
-      line-height: 1.45;
-      text-shadow: 0 0 18px rgba(0,0,0,0.45);
-      max-width: 900px;
-    }
-
-    #manifesto-caret {
-      display: inline-block;
-      width: 0.08em;
-      background: #fff;
-      margin-left: 0.08em;
-      animation: blink 0.9s steps(1) infinite;
-      vertical-align: baseline;
-    }
-
-    @keyframes blink {
-      50% { opacity: 0; }
-    }
-
-    @media (max-width: 768px) {
-      #logo {
-        width: 46px;
-        bottom: 6px;
-      }
-
-      #hint {
-        font-size: 11px;
-        bottom: 24px;
-      }
-
-      #fullscreen-btn {
-        right: 10px;
-        bottom: 10px;
-        width: 36px;
-        height: 36px;
-        opacity: 0.5;
-      }
-    }
+    #manifesto-caret { display: inline-block; width: 0.2em; background: #fff; margin-left: 5px; animation: blink 1s infinite; }
+    @keyframes blink { 50% { opacity: 0; } }
+    @keyframes breathe { 0%, 100% { background: rgba(255,255,255,0); } 50% { background: rgba(255,255,255,0.018); } }
+    #tap-layer.alive { animation: breathe var(--breath-rate, 8s) ease-in-out infinite; }
   </style>
 </head>
 <body>
   <div id="app">
     <div id="start-overlay">
-      <img id="start-logo" src="/simp.png" alt="Simp" />
-      <button id="start-btn" disabled>Loading…</button>
-      <div id="start-status">Preparing your session</div>
-    </div>
-
-    <div id="loader">Chargement…</div>
-    <div id="message"></div>
-
-    <div id="player-container">
-      <div id="player-frame">
-        <iframe
-          id="player"
-          allow="autoplay; encrypted-media; picture-in-picture; accelerometer; gyroscope"
-          allowfullscreen
-          referrerpolicy="strict-origin-when-cross-origin"
-        ></iframe>
+      <img id="start-logo" src="/simp.png" />
+      <div class="input-wrapper">
+        <div id="access-hint">What time is it in Wonderland?</div>
+        <input type="tel" id="access-input" placeholder="0000" maxlength="4" autocomplete="off" autofocus>
+        <div class="button-group" id="btn-group">
+          <button class="choice-btn btn-red" id="btn-yalp">yalp</button>
+          <button class="choice-btn btn-blue" id="btn-play">play</button>
+        </div>
       </div>
     </div>
 
-    <div id="tap-layer" aria-label="Suivant"></div>
-    <div id="hint">Tap / clic n’importe où = suivant · Secoue = suivant · F = fullscreen</div>
-
-    <div id="fullscreen-btn" aria-label="Fullscreen" title="Fullscreen">
-      <svg id="fullscreen-icon-enter" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-        <polyline points="8 3 3 3 3 8"></polyline>
-        <line x1="3" y1="3" x2="9" y2="9"></line>
-        <polyline points="16 3 21 3 21 8"></polyline>
-        <line x1="21" y1="3" x2="15" y2="9"></line>
-        <polyline points="8 21 3 21 3 16"></polyline>
-        <line x1="3" y1="21" x2="9" y2="15"></line>
-        <polyline points="16 21 21 21 21 16"></polyline>
-        <line x1="21" y1="21" x2="15" y2="15"></line>
-      </svg>
-
-      <svg id="fullscreen-icon-exit" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="display:none;">
-        <polyline points="9 3 9 9 3 9"></polyline>
-        <line x1="9" y1="9" x2="3" y2="3"></line>
-        <polyline points="15 3 15 9 21 9"></polyline>
-        <line x1="15" y1="9" x2="21" y2="3"></line>
-        <polyline points="9 21 9 15 3 15"></polyline>
-        <line x1="9" y1="15" x2="3" y2="21"></line>
-        <polyline points="15 21 15 15 21 15"></polyline>
-        <line x1="15" y1="15" x2="21" y2="21"></line>
-      </svg>
+    <div id="player-container">
+      <div id="player-frame"><div id="player"></div></div>
     </div>
 
-    <img id="logo" src="/simp.png" alt="Simp" />
+    <div id="tap-layer"></div>
+    <img id="logo" src="/simp.png" />
 
-    <div id="manifesto-overlay">
-      <div id="manifesto-text"></div>
+    <div id="fullscreen-btn">
+      <svg id="fullscreen-icon-enter" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:18px;"><polyline points="15 3 21 3 21 9"></polyline><polyline points="9 21 3 21 3 15"></polyline><line x1="21" y1="3" x2="14" y2="10"></line><line x1="3" y1="21" x2="10" y2="14"></line></svg>
+      <svg id="fullscreen-icon-exit" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:18px; display:none;"><polyline points="4 14 10 14 10 20"></polyline><polyline points="20 10 14 10 14 4"></polyline><line x1="14" y1="10" x2="21" y2="3"></line><line x1="3" y1="21" x2="10" y2="14"></line></svg>
     </div>
+
+    <div id="manifesto-overlay"><div id="manifesto-text"></div></div>
   </div>
 
   <script>
     const SHEET = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQWb6tylWpk9MZSp4sppFMgMPsVJBp3xyV5aJxLciYDcS2U5XiljbZlAg8muJzc3f6J4-bVfqYJf-a4/pub?output=csv";
-
-    const MANIFESTO_TEXT =
-`No account.
-No password.
-No ads.
-No cookies.
-No tracking.
-No data collection.
-Just music, video, and privacy.
-
-contact -> maxwatering@gmail.com`;
+    const MANIFESTO_TEXT = `No account.\nNo password.\nNo ads.\nNo cookies.\nNo tracking.\nNo data collection.\n\nJust music, video, and privacy. ♥️`;
 
     let videos = [];
     let currentIndex = 0;
     let watchStart = 0;
     let userStarted = false;
-    let userInteracted = false;
-    let lastSkip = 0;
+    let ytPlayer = null;
+    let skipStreak = 0;
     let lastShake = 0;
-    let motionEnabled = false;
-    let typingTimeout = null;
+    let positiveListens = 0;
     let manifestoOpen = false;
-
-    // PROFIL DE SESSION : On stocke les scores ici
+    let typingTimeout = null;
     const profile = { category:{}, mood:{}, energy:{} };
-    const recent = []; // Historique court pour éviter les répétitions
+    const recent = [];
 
-    const app = document.getElementById("app");
-    const player = document.getElementById("player");
-    const tap = document.getElementById("tap-layer");
-    const logo = document.getElementById("logo");
-    const manifesto = document.getElementById("manifesto-overlay");
-    const textEl = document.getElementById("manifesto-text");
-    const fullscreenBtn = document.getElementById("fullscreen-btn");
-    const startOverlay = document.getElementById("start-overlay");
-    const startBtn = document.getElementById("start-btn");
-    const startStatus = document.getElementById("start-status");
-    const loader = document.getElementById("loader");
-    const message = document.getElementById("message");
-    const hint = document.getElementById("hint");
-    const enterIcon = document.getElementById("fullscreen-icon-enter");
-    const exitIcon = document.getElementById("fullscreen-icon-exit");
+    const tag = document.createElement('script');
+    tag.src = "https://www.youtube.com/iframe_api";
+    document.head.appendChild(tag);
 
-    function showMessage(text) {
-      message.textContent = text;
-      message.style.display = "flex";
-    }
+    window.onYouTubeIframeAPIReady = () => { console.log("%c [SYSTEM] Engine Online.", "color: #555; font-weight: bold;"); };
 
-    function hideHint() {
-      hint.classList.add("hidden");
-    }
-
-    function idFromUrl(url){
-      try{
-        const u = new URL(url);
-        return u.searchParams.get("v") || u.pathname.split("/").filter(Boolean).pop();
-      } catch {
-        return null;
+    function createPlayer(videoId) {
+      if (ytPlayer && ytPlayer.loadVideoById) {
+        ytPlayer.loadVideoById(videoId);
+      } else {
+        ytPlayer = new YT.Player('player', {
+          videoId: videoId,
+          playerVars: { 'autoplay': 1, 'controls': 0, 'modestbranding': 1, 'rel': 0, 'playsinline': 1, 'enablejsapi': 1 },
+          events: { 
+            'onReady': (e) => e.target.playVideo(),
+            'onStateChange': (e) => { if(e.data === YT.PlayerState.ENDED) next(); }
+          }
+        });
       }
     }
 
-    function embed(id){
-      return `https://www.youtube.com/embed/${id}?autoplay=1&mute=${userInteracted ? 0 : 1}&controls=0&modestbranding=1&rel=0&playsinline=1&iv_load_policy=3&fs=0&disablekb=1`;
-    }
+    const accessInput = document.getElementById('access-input');
+    const btnGroup = document.getElementById('btn-group');
 
-    // Fonction utilitaire pour ajuster les scores
-    function bump(obj, key, val){
-      if(!key || key === "") return;
-      obj[key] = (obj[key] || 0) + val;
-    }
+    accessInput.addEventListener('input', () => {
+      const now = new Date();
+      const timeCode = String(now.getHours()).padStart(2, '0') + String(now.getMinutes()).padStart(2, '0');
+      if (accessInput.value === timeCode) {
+        btnGroup.classList.add('visible');
+        accessInput.blur();
+      }
+    });
 
     function parseCSVLine(line) {
       const result = [];
       let current = "";
       let inQuotes = false;
-
+      const sep = line.includes(';') ? ';' : ',';
       for (let i = 0; i < line.length; i++) {
         const char = line[i];
-        const nextChar = line[i + 1];
-
-        if (char === '"') {
-          if (inQuotes && nextChar === '"') {
-            current += '"';
-            i++;
-          } else {
-            inQuotes = !inQuotes;
-          }
-        } else if (char === "," && !inQuotes) {
-          result.push(current);
-          current = "";
-        } else {
-          current += char;
-        }
+        if (char === '"') inQuotes = !inQuotes;
+        else if (char === sep && !inQuotes) { result.push(current); current = ""; }
+        else current += char;
       }
-
       result.push(current);
       return result;
     }
 
-    function csvToObjects(csvText) {
-      const lines = csvText.split(/\r?\n/).filter(line => line.trim().length > 0);
-      if (lines.length < 2) return [];
-      const headers = parseCSVLine(lines[0]).map(h => h.trim());
-      return lines.slice(1).map(line => {
-        const values = parseCSVLine(line);
-        const obj = {};
-        headers.forEach((header, index) => {
-          obj[header] = (values[index] || "").trim();
-        });
-        return obj;
-      });
-    }
-
-    function normalizeValue(v) {
-      return (v || "").trim().toLowerCase();
-    }
-
     async function loadVideos(){
-      const txt = await fetch(SHEET).then(r => {
-        if (!r.ok) throw new Error(`Google Sheet error ${r.status}`);
-        return r.text();
-      });
-
-      const rows = csvToObjects(txt);
-
-      videos = rows.map((row, index) => {
-        const url = row.youtube_url || row.url || row.video_url || row.link || "";
-        return {
-          id: idFromUrl(url),
-          category: normalizeValue(row.category),
-          mood: normalizeValue(row.mood),
-          energy: normalizeValue(row.energy),
-          raw: row,
-          index
-        };
-      }).filter(v => v.id);
-
-      if (!videos.length) throw new Error("No valid videos found");
+      try {
+        const txt = await fetch(SHEET).then(r => r.text());
+        const lines = txt.split(/\r?\n/).filter(l => l.trim());
+        const headers = parseCSVLine(lines[0]).map(h => h.trim().toLowerCase());
+        videos = lines.slice(1).map(line => {
+          const values = parseCSVLine(line);
+          const obj = {};
+          headers.forEach((h, i) => obj[h] = (values[i] || "").trim());
+          const url = obj.youtube_url || obj.url || obj.video_url || obj.link || "";
+          let id = url.includes("v=") ? url.split("v=")[1].split("&")[0] : url.split("/").pop();
+          return { id: id, category: (obj.category || "").toLowerCase(), mood: (obj.mood || "").toLowerCase(), energy: (obj.energy || "").toLowerCase(), length: parseInt(obj.video_length) || 180 };
+        }).filter(v => v.id && v.id.length > 5);
+      } catch (e) { console.error(e); }
     }
 
-    // LOGIQUE DE RECOMMANDATION - ETAPE 1 : Apprendre du visionnage
+    // --- ALGORITHME DÉTAILLÉ ---
     function feedback(video, durationSeconds){
       if(!video) return;
-
+      const progress = durationSeconds / video.length;
       let weight = 0;
-      if(durationSeconds < 5) {
-        weight = -3; // Skip rapide = désintérêt fort
-      } else if (durationSeconds < 30) {
-        weight = 1;  // Visionnage moyen = intérêt modéré
+      let reason = "";
+
+      if (durationSeconds < 10 || progress < 0.15) {
+        weight = -5; skipStreak++;
+        reason = "Hard skip / Disinterest detected.";
+      } else if (progress < 0.5) {
+        weight = -1; skipStreak = 0;
+        reason = "Partial play. Style not matching current vibe.";
+      } else if (progress < 0.9) {
+        weight = 3; skipStreak = 0;
+        reason = "Engaged listener. Positive reinforcement applied.";
       } else {
-        weight = 3;  // Visionnage long = kiff
+        weight = 7; skipStreak = 0;
+        reason = "Full track completion. Heavily weighting these tags.";
       }
 
+      console.group(`🧠 ALGO: Feedback for ${video.id}`);
+      console.log(`%c Result: ${weight > 0 ? 'REWARD' : 'PENALTY'} (${weight} pts)`, weight > 0 ? "color: #44ff44; font-weight: bold;" : "color: #ff4444; font-weight: bold;");
+      console.log(`Watch time: ${Math.round(durationSeconds)}s / ${video.length}s (${Math.round(progress*100)}%)`);
+      console.log(`Reason: ${reason}`);
+      console.groupEnd();
+
+      const bump = (obj, key, val) => { if(key && key !== "") obj[key] = (obj[key] || 0) + val; };
       bump(profile.category, video.category, weight);
       bump(profile.mood, video.mood, weight);
       bump(profile.energy, video.energy, weight);
-      
-      console.log("Profile updated:", profile);
+      if (weight > 0) { positiveListens++; updateBreath(); }
     }
 
-    // LOGIQUE DE RECOMMANDATION - ETAPE 2 : Calculer le score d'une vidéo
-    function calculateVideoScore(v){
-      let s = 0;
-      
-      // Points basés sur le profil de session
-      s += (profile.category[v.category] || 0) * 2;
-      s += (profile.mood[v.mood] || 0) * 2;
-      s += (profile.energy[v.energy] || 0) * 1.5;
-
-      // Anti-répétition : grosse pénalité si vue récemment
-      if(recent.includes(v.id)) s -= 100;
-
-      // Bonus d'exploration (un peu d'aléatoire pour découvrir)
-      s += Math.random() * 5;
-
-      return s;
-    }
-
-    // LOGIQUE DE RECOMMANDATION - ETAPE 3 : Choisir la meilleure candidate
-    function pickNextVideoIndex(){
-      if (videos.length <= 1) return 0;
-
-      // On score toutes les vidéos
-      const scoredList = videos.map((v, idx) => ({
-        index: idx,
-        score: calculateVideoScore(v)
-      }));
-
-      // On trie par score décroissant
-      scoredList.sort((a, b) => b.score - a.score);
-
-      // On prend au hasard parmi les 3 meilleures pour ne pas être trop prévisible
-      const topPool = scoredList.slice(0, Math.min(3, scoredList.length));
-      const chosen = topPool[Math.floor(Math.random() * topPool.length)];
-      
-      return chosen.index;
-    }
-
-    function play(i){
-      currentIndex = i;
-      const video = videos[i];
-      player.src = embed(video.id);
-      watchStart = Date.now();
-      
-      // Ajout à l'historique récent
-      recent.push(video.id);
-      if (recent.length > 15) recent.shift();
+    function updateBreath() {
+      if (positiveListens < 3) return;
+      const top = Object.entries(profile.energy).sort((a,b) => b[1]-a[1])[0]?.[0] || "";
+      const rate = /high|fast|energe|hype/i.test(top) ? 5 : /low|chill|ambient|slow/i.test(top) ? 13 : 8;
+      const tl = document.getElementById('tap-layer');
+      tl.style.setProperty('--breath-rate', rate + 's');
+      tl.classList.add('alive');
     }
 
     function next(){
-      const now = Date.now();
-      if(now - lastSkip < 800) return;
-      lastSkip = now;
+      if(!userStarted || videos.length === 0) return;
+      feedback(videos[currentIndex], (Date.now() - watchStart)/1000);
 
-      // Avant de changer, on analyse combien de temps la vidéo précédente a été vue
-      const currentVideo = videos[currentIndex];
-      const duration = (Date.now() - watchStart) / 1000;
-      feedback(currentVideo, duration);
-
-      const nextIndex = pickNextVideoIndex();
+      console.group("🔮 ALGO: Calculating Next Recommendation");
       
-      // Petit effet visuel de transition
-      player.style.opacity = "0";
+      // Top Affinities Log
+      const getTop = (obj) => Object.entries(obj).sort((a,b) => b[1]-a[1]).slice(0,2).map(x => `${x[0]}(${x[1]})`).join(', ');
+      console.log(`Current Affinities: [CAT: ${getTop(profile.category)}] [MOOD: ${getTop(profile.mood)}]`);
+
+      const scored = videos.map((v, i) => {
+        let catScore = (profile.category[v.category] || 0) * 3;
+        let moodScore = (profile.mood[v.mood] || 0) * 3;
+        let energyScore = (profile.energy[v.energy] || 0) * 2;
+        let s = catScore + moodScore + energyScore;
+        if(recent.includes(v.id)) s -= 500;
+        return { i, s: s + Math.random() * 20, v };
+      }).sort((a,b) => b.s - a.s);
+      
+      // Candidate Analysis
+      console.log("Top 3 Candidates:");
+      scored.slice(0, 3).forEach((c, idx) => {
+          console.log(`${idx+1}. ID: ${c.v.id} | Score: ${Math.round(c.s)} | Match: ${c.v.category}/${c.v.mood}`);
+      });
+
+      currentIndex = scored[0].i;
+      console.log(`%c Decision: Loading candidate #1 (Best compatibility)`, "color: #0066ff; font-weight: bold;");
+      console.groupEnd();
+
+      document.getElementById("player-frame").style.opacity = "0";
+      setTimeout(() => { play(currentIndex); document.getElementById("player-frame").style.opacity = "1"; }, 400);
+    }
+
+    function play(idx){
+      const video = videos[idx];
+      createPlayer(video.id);
+      watchStart = Date.now();
+      recent.push(video.id);
+      if(recent.length > 30) recent.shift();
       setTimeout(() => {
-        play(nextIndex);
-        player.style.opacity = "1";
-      }, 200);
-    }
-
-    async function enableMotionIfPossible() {
-      if (motionEnabled) return;
-      if (!("DeviceMotionEvent" in window)) return;
-      try {
-        if (typeof DeviceMotionEvent.requestPermission === "function") {
-          const permission = await DeviceMotionEvent.requestPermission();
-          if (permission !== "granted") return;
+        if(ytPlayer && ytPlayer.setVolume) {
+          const v = ytPlayer.getVolume();
+          ytPlayer.setVolume(v > 0 ? v - 1 : 1);
+          setTimeout(() => ytPlayer.setVolume(v), 50);
         }
-        window.addEventListener("devicemotion", (e) => {
-          if (!userStarted || manifestoOpen) return;
-          const acc = e.accelerationIncludingGravity || e.acceleration;
-          if (!acc) return;
-          const total = Math.abs(acc.x || 0) + Math.abs(acc.y || 0) + Math.abs(acc.z || 0);
-          const now = Date.now();
-          if(total > 40 && now - lastShake > 1200){
-            lastShake = now;
-            next();
-          }
-        }, { passive: true });
-        motionEnabled = true;
-      } catch {}
-    }
-
-    function updateFullscreenIcon() {
-      const active = !!document.fullscreenElement;
-      enterIcon.style.display = active ? "none" : "block";
-      exitIcon.style.display = active ? "block" : "none";
-    }
-
-    async function toggleFullscreen() {
-      try {
-        if (!document.fullscreenElement) {
-          await app.requestFullscreen();
-        } else {
-          await document.exitFullscreen();
-        }
-      } catch {}
+      }, 2000);
     }
 
     function typeText(){
       const text = MANIFESTO_TEXT;
+      const textEl = document.getElementById("manifesto-text");
       textEl.innerHTML = "";
       let i = 0;
       if (typingTimeout) clearTimeout(typingTimeout);
       function t(){
         textEl.innerHTML = text.slice(0, i++) + '<span id="manifesto-caret"></span>';
-        if(i <= text.length) {
-          typingTimeout = setTimeout(t, 20);
-        } else {
-          textEl.innerHTML = text;
-        }
+        if(i <= text.length) typingTimeout = setTimeout(t, 40);
+        else textEl.innerHTML = text;
       }
       t();
     }
 
-    async function boot() {
-      try {
-        await loadVideos();
-        startBtn.disabled = false;
-        startBtn.textContent = "Click to start";
-        startStatus.textContent = `${videos.length} videos ready`;
-      } catch (err) {
-        startBtn.disabled = true;
-        startBtn.textContent = "Unavailable";
-        startStatus.textContent = "Impossible to load the session";
-        console.error(err);
-      }
+    async function requestMotionPermission() {
+      if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
+        try {
+          const response = await DeviceMotionEvent.requestPermission();
+          if (response === 'granted') window.addEventListener('devicemotion', handleMotion);
+        } catch (e) { console.error(e); }
+      } else { window.addEventListener('devicemotion', handleMotion); }
     }
 
-    startBtn.onclick = async () => {
-      if (!videos.length) return;
+    function handleMotion(event) {
+      if (!userStarted || manifestoOpen) return;
+      const acc = event.accelerationIncludingGravity;
+      const delta = Math.abs(acc.x) + Math.abs(acc.y) + Math.abs(acc.z);
+      const now = Date.now();
+      if (delta > 35 && now - lastShake > 1500) { lastShake = now; next(); }
+    }
+
+    const startAction = () => {
       userStarted = true;
-      userInteracted = true;
-      startOverlay.classList.add("hidden");
-      hideHint();
+      document.getElementById('start-overlay').classList.add('hidden');
+      requestMotionPermission();
       play(Math.floor(Math.random() * videos.length));
-      enableMotionIfPossible();
     };
 
-    tap.onclick = ()=>{
-      if(!userStarted || manifestoOpen) return;
-      next();
-    };
-
-    logo.onclick = (e)=>{
+    document.getElementById('btn-play').onclick = startAction;
+    document.getElementById('btn-yalp').onclick = startAction;
+    document.getElementById('tap-layer').onclick = () => { if(!manifestoOpen) next(); };
+    document.getElementById('logo').onclick = (e) => {
       e.stopPropagation();
       manifestoOpen = !manifestoOpen;
-      manifesto.classList.toggle("visible");
-      if (manifestoOpen) {
-        typeText();
-      } else {
-        textEl.innerHTML = "";
-        if (typingTimeout) clearTimeout(typingTimeout);
-      }
+      document.getElementById("manifesto-overlay").classList.toggle("visible");
+      if(manifestoOpen) typeText();
     };
-
-    manifesto.onclick = (e) => {
-      e.stopPropagation();
+    document.getElementById('manifesto-overlay').onclick = () => {
+      document.getElementById("manifesto-overlay").classList.remove("visible");
       manifestoOpen = false;
-      manifesto.classList.remove("visible");
-      textEl.innerHTML = "";
-      if (typingTimeout) clearTimeout(typingTimeout);
     };
-
-    fullscreenBtn.onclick = (e)=>{
+    const fsBtn = document.getElementById('fullscreen-btn');
+    fsBtn.onclick = (e) => {
       e.stopPropagation();
-      toggleFullscreen();
+      if(!document.fullscreenElement) document.documentElement.requestFullscreen();
+      else document.exitFullscreen();
     };
-
-    document.addEventListener("fullscreenchange", updateFullscreenIcon);
-
-    document.addEventListener("keydown",(e)=>{
-      if(e.key === "Escape" && manifestoOpen){
-        manifestoOpen = false;
-        manifesto.classList.remove("visible");
-        textEl.innerHTML = "";
-        return;
-      }
-      if(e.key.toLowerCase() === "f") {
-        e.preventDefault();
-        toggleFullscreen();
-        return;
-      }
-      if((e.key === " " || e.key === "ArrowRight" || e.key.toLowerCase() === "n") && userStarted && !manifestoOpen){
-        e.preventDefault();
-        next();
-      }
-    });
-
-    boot();
+    document.onfullscreenchange = () => {
+      const isFS = !!document.fullscreenElement;
+      document.getElementById("fullscreen-icon-enter").style.display = isFS ? "none" : "block";
+      document.getElementById("fullscreen-icon-exit").style.display = isFS ? "block" : "none";
+    };
+    document.onkeydown = (e) => {
+      if(e.key.toLowerCase() === "f") fsBtn.click();
+      if((e.key === " " || e.key === "ArrowRight") && userStarted && !manifestoOpen) next();
+    };
+    loadVideos();
   </script>
 </body>
 </html>
