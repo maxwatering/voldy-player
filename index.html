@@ -80,6 +80,22 @@
     @keyframes breathe { 0%, 100% { background: rgba(255,255,255,0); } 50% { background: rgba(255,255,255,0.018); } }
     #tap-layer.alive { animation: breathe var(--breath-rate, 8s) ease-in-out infinite; }
 
+    /* LONG PRESS ADN */
+    #tap-layer::after {
+      content: ''; position: absolute; bottom: 0; left: 0;
+      height: 2px; background: rgba(255,255,255,0.07);
+      width: var(--lp-progress, 0%); pointer-events: none;
+    }
+    #adn-overlay {
+      position: absolute; inset: 0; display: none; align-items: center; justify-content: center;
+      z-index: 110; background: rgba(0,0,0,0.98); pointer-events: none;
+    }
+    #adn-overlay.visible { display: flex; }
+    #adn-text {
+      color: #fff; font-family: 'Press Start 2P', cursive;
+      font-size: clamp(8px, 1.6vw, 13px); white-space: pre; line-height: 2.4; text-align: left;
+    }
+
     /* EMPREINTE */
     #empreinte-overlay {
       position: absolute; inset: 0; display: none; flex-direction: column;
@@ -123,6 +139,7 @@
 
     <div id="manifesto-overlay"><div id="manifesto-text"></div></div>
     <div id="empreinte-overlay"><div id="empreinte-content"></div></div>
+    <div id="adn-overlay"><div id="adn-text"></div></div>
   </div>
 
   <script>
@@ -142,6 +159,13 @@
     let touchStartY = 0;
     let touchSwiped = false;
     let typingTimeout = null;
+    let lpTimer = null;
+    let lpActive = false;
+    let lpWasFired = false;
+    let lpRAF = null;
+    let lpStart = 0;
+    let adnTypingTimeout = null;
+    let lastTouchTime = 0;
     const profile = { category:{}, mood:{}, energy:{} };
     const recent = [];
 
@@ -258,6 +282,54 @@
         : '<div class="ep-empty">Listen more.<br>Your empreinte will form.</div>';
     }
 
+    function startLP() {
+      if (!userStarted || manifestoOpen || empreinteOpen || videos.length === 0) return;
+      lpStart = Date.now();
+      lpTimer = setTimeout(showADN, 3000);
+      lpRAF = requestAnimationFrame(animateLPBar);
+    }
+
+    function endLP() {
+      clearTimeout(lpTimer); lpTimer = null;
+      cancelAnimationFrame(lpRAF); lpRAF = null;
+      tapLayer.style.setProperty('--lp-progress', '0%');
+      if (lpActive) {
+        lpActive = false;
+        document.getElementById('adn-overlay').classList.remove('visible');
+        if (adnTypingTimeout) { clearTimeout(adnTypingTimeout); adnTypingTimeout = null; }
+      }
+    }
+
+    function animateLPBar() {
+      const pct = Math.min(((Date.now() - lpStart) / 3000) * 100, 100);
+      tapLayer.style.setProperty('--lp-progress', pct + '%');
+      if (pct < 100) lpRAF = requestAnimationFrame(animateLPBar);
+    }
+
+    function showADN() {
+      lpActive = true;
+      lpWasFired = true;
+      tapLayer.style.setProperty('--lp-progress', '0%');
+      const v = videos[currentIndex];
+      const score = (profile.category[v.category] || 0) + (profile.mood[v.mood] || 0) + (profile.energy[v.energy] || 0);
+      const pos = String(currentIndex + 1).padStart(3, '0');
+      const tot = String(videos.length).padStart(3, '0');
+      const now = new Date();
+      const wl = String(now.getHours()).padStart(2,'0') + String(now.getMinutes()).padStart(2,'0');
+      const text = `> category:  ${v.category || '—'}\n> mood:      ${v.mood || '—'}\n> energy:    ${v.energy || '—'}\n> score:     ${score >= 0 ? '+' : ''}${score}\n> #${pos} / ${tot}\n> wonderland: ${wl}`;
+      document.getElementById('adn-overlay').classList.add('visible');
+      typeADN(text);
+    }
+
+    function typeADN(text) {
+      const el = document.getElementById('adn-text');
+      el.textContent = '';
+      let i = 0;
+      if (adnTypingTimeout) clearTimeout(adnTypingTimeout);
+      function t() { el.textContent = text.slice(0, i++); if (i <= text.length) adnTypingTimeout = setTimeout(t, 18); }
+      t();
+    }
+
     function toggleEmpreinte() {
       empreinteOpen = !empreinteOpen;
       if (empreinteOpen) renderEmpreinte();
@@ -345,7 +417,7 @@
     }
 
     function handleMotion(event) {
-      if (!userStarted || manifestoOpen || empreinteOpen) return;
+      if (!userStarted || manifestoOpen || empreinteOpen || lpActive) return;
       const acc = event.accelerationIncludingGravity;
       const delta = Math.abs(acc.x) + Math.abs(acc.y) + Math.abs(acc.z);
       const now = Date.now();
@@ -362,11 +434,23 @@
     document.getElementById('btn-play').onclick = startAction;
     document.getElementById('btn-yalp').onclick = startAction;
     const tapLayer = document.getElementById('tap-layer');
-    tapLayer.addEventListener('touchstart', e => { touchStartY = e.touches[0].clientY; touchSwiped = false; }, { passive: true });
+    tapLayer.addEventListener('touchstart', e => {
+      lastTouchTime = Date.now();
+      touchStartY = e.touches[0].clientY; touchSwiped = false;
+      startLP();
+    }, { passive: true });
     tapLayer.addEventListener('touchend', e => {
+      endLP();
       if (touchStartY - e.changedTouches[0].clientY > 70) { touchSwiped = true; e.preventDefault(); if (userStarted && !manifestoOpen) toggleEmpreinte(); }
     }, { passive: false });
-    tapLayer.onclick = () => { if (touchSwiped) { touchSwiped = false; return; } if (!manifestoOpen && !empreinteOpen) next(); };
+    tapLayer.addEventListener('mousedown', () => { if (Date.now() - lastTouchTime > 500) startLP(); });
+    tapLayer.addEventListener('mouseup', () => { if (Date.now() - lastTouchTime > 500) endLP(); });
+    tapLayer.addEventListener('mouseleave', () => { if (Date.now() - lastTouchTime > 500) endLP(); });
+    tapLayer.onclick = () => {
+      if (touchSwiped) { touchSwiped = false; return; }
+      if (lpWasFired) { lpWasFired = false; return; }
+      if (!manifestoOpen && !empreinteOpen) next();
+    };
     document.getElementById('logo').onclick = (e) => {
       e.stopPropagation();
       manifestoOpen = !manifestoOpen;
