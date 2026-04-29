@@ -79,6 +79,20 @@
     @keyframes blink { 50% { opacity: 0; } }
     @keyframes breathe { 0%, 100% { background: rgba(255,255,255,0); } 50% { background: rgba(255,255,255,0.018); } }
     #tap-layer.alive { animation: breathe var(--breath-rate, 8s) ease-in-out infinite; }
+
+    /* EMPREINTE */
+    #empreinte-overlay {
+      position: absolute; inset: 0; display: none; flex-direction: column;
+      justify-content: center; align-items: flex-start;
+      z-index: 100; background: rgba(0,0,0,0.98); padding: 10vh 12vw; cursor: pointer;
+    }
+    #empreinte-overlay.visible { display: flex; }
+    #empreinte-content { font-size: 11px; line-height: 2; max-width: 420px; pointer-events: none; }
+    .ep-section { color: #2a2a2a; letter-spacing: .25em; font-size: 9px; margin: 28px 0 10px; }
+    .ep-row { display: flex; align-items: center; gap: 14px; margin: 5px 0; }
+    .ep-key { color: #fff; width: 110px; font-size: 10px; letter-spacing: .04em; flex-shrink: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .ep-bar { height: 1px; background: #fff; opacity: 0.5; transition: width 1s ease; }
+    .ep-empty { color: #2a2a2a; line-height: 3; font-size: 11px; }
   </style>
 </head>
 <body>
@@ -108,6 +122,7 @@
     </div>
 
     <div id="manifesto-overlay"><div id="manifesto-text"></div></div>
+    <div id="empreinte-overlay"><div id="empreinte-content"></div></div>
   </div>
 
   <script>
@@ -123,6 +138,9 @@
     let lastShake = 0;
     let positiveListens = 0;
     let manifestoOpen = false;
+    let empreinteOpen = false;
+    let touchStartY = 0;
+    let touchSwiped = false;
     let typingTimeout = null;
     const profile = { category:{}, mood:{}, energy:{} };
     const recent = [];
@@ -225,6 +243,27 @@
       if (weight > 0) { positiveListens++; updateBreath(); }
     }
 
+    function renderEmpreinte() {
+      const el = document.getElementById('empreinte-content');
+      const section = (obj, label) => {
+        const rows = Object.entries(obj).filter(([,v]) => v > 0).sort((a,b) => b[1]-a[1]).slice(0,5);
+        if (!rows.length) return '';
+        const max = rows[0][1];
+        return `<div class="ep-section">${label}</div>` +
+          rows.map(([k,v]) => `<div class="ep-row"><span class="ep-key">${k}</span><span class="ep-bar" style="width:${Math.round((v/max)*160)}px"></span></div>`).join('');
+      };
+      const hasData = Object.values(profile.category).some(v => v > 0) || Object.values(profile.mood).some(v => v > 0);
+      el.innerHTML = hasData
+        ? section(profile.category,'CATEGORY') + section(profile.mood,'MOOD') + section(profile.energy,'ENERGY')
+        : '<div class="ep-empty">Listen more.<br>Your empreinte will form.</div>';
+    }
+
+    function toggleEmpreinte() {
+      empreinteOpen = !empreinteOpen;
+      if (empreinteOpen) renderEmpreinte();
+      document.getElementById('empreinte-overlay').classList.toggle('visible', empreinteOpen);
+    }
+
     function updateBreath() {
       if (positiveListens < 3) return;
       const top = Object.entries(profile.energy).sort((a,b) => b[1]-a[1])[0]?.[0] || "";
@@ -306,7 +345,7 @@
     }
 
     function handleMotion(event) {
-      if (!userStarted || manifestoOpen) return;
+      if (!userStarted || manifestoOpen || empreinteOpen) return;
       const acc = event.accelerationIncludingGravity;
       const delta = Math.abs(acc.x) + Math.abs(acc.y) + Math.abs(acc.z);
       const now = Date.now();
@@ -322,7 +361,12 @@
 
     document.getElementById('btn-play').onclick = startAction;
     document.getElementById('btn-yalp').onclick = startAction;
-    document.getElementById('tap-layer').onclick = () => { if(!manifestoOpen) next(); };
+    const tapLayer = document.getElementById('tap-layer');
+    tapLayer.addEventListener('touchstart', e => { touchStartY = e.touches[0].clientY; touchSwiped = false; }, { passive: true });
+    tapLayer.addEventListener('touchend', e => {
+      if (touchStartY - e.changedTouches[0].clientY > 70) { touchSwiped = true; e.preventDefault(); if (userStarted && !manifestoOpen) toggleEmpreinte(); }
+    }, { passive: false });
+    tapLayer.onclick = () => { if (touchSwiped) { touchSwiped = false; return; } if (!manifestoOpen && !empreinteOpen) next(); };
     document.getElementById('logo').onclick = (e) => {
       e.stopPropagation();
       manifestoOpen = !manifestoOpen;
@@ -332,6 +376,10 @@
     document.getElementById('manifesto-overlay').onclick = () => {
       document.getElementById("manifesto-overlay").classList.remove("visible");
       manifestoOpen = false;
+    };
+    document.getElementById('empreinte-overlay').onclick = () => {
+      document.getElementById('empreinte-overlay').classList.remove('visible');
+      empreinteOpen = false;
     };
     const fsBtn = document.getElementById('fullscreen-btn');
     fsBtn.onclick = (e) => {
@@ -346,7 +394,8 @@
     };
     document.onkeydown = (e) => {
       if(e.key.toLowerCase() === "f") fsBtn.click();
-      if((e.key === " " || e.key === "ArrowRight") && userStarted && !manifestoOpen) next();
+      if(e.key.toLowerCase() === "e" && userStarted) toggleEmpreinte();
+      if((e.key === " " || e.key === "ArrowRight") && userStarted && !manifestoOpen && !empreinteOpen) next();
     };
     loadVideos();
   </script>
